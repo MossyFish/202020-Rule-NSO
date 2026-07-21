@@ -47,9 +47,12 @@ try:
     ctypes.windll.sh1core.SetProcessDpiAwareness(1)
 except Exception:
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-5))
     except Exception:
-        pass
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(0)
+        except Exception:
+            pass
 
 ### Default settings
 TIMER = 20
@@ -271,4 +274,3 @@ class Widget(tk.Tk):
         self.remaining = self.timer_duration
         self._update_time_labels()
                         
-            
