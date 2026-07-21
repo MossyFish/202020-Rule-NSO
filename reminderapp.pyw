@@ -1,5 +1,5 @@
 """
-Draws the widget and functionality using the methods from the widget ui file.
+Draws and makes widget function.
 """
 import ctypes
 import importlib.util
@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tkinter as tk
 from tkinter import messagebox
+from ui_elements import widget
 
 REQUIRED_PACKAGES = {"pystray": "pystray", "PIL": "Pillow"}
 
@@ -44,7 +45,7 @@ from ui_elements import (
 )
  
 try:
-    ctypes.windll.sh1core.SetProcessDpiAwareness(1)
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
     try:
         ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-5))
@@ -101,6 +102,10 @@ class Widget(tk.Tk):
 
         self.after(TICK_MS, self._tick)       
 
+    # Check current theme colors dict
+    def _theme(self):
+        return THEME[self.NSO_theme]
+    
     ### Layout
     # Swaps between collapsed and expanded size + position
     def _refresh_layout(self):
@@ -118,14 +123,48 @@ class Widget(tk.Tk):
             self._placed = True
         else:
             resize_window(self, w, h)
-            
+    ### Drag  
+    # Records the click position to measure movement from it
+    def _on_press(self, event):
+        self.focus_set()
+        self._drag_data["x"] = event.x
+        self._drag_data["y"] = event.y
+        self._drag_data["moved"] = False
+
+    # Moves the window under the cursor while holding the button
+    def _on_drag(self, event):
+        dx = event.x - self._drag_data["x"]
+        dy = event.y - self._drag_data["y"]
+        if abs(dx) > DRAG_CLICK_THRESHOLD or abs(dy) > DRAG_CLICK_THRESHOLD:
+            self._drag_data["moved"] = True
+            x = self.winfo_x() + dx
+            y = self.winfo_y() + dy
+        
+        self.geometry(f"+{x}+{y}")
+
+    # Drag detection for titlebar click
+    def _on_release(self, event):
+        if not self._drag_data["moved"]:
+            self.toggle()
+
+    # Drag detection for square click
+    def _on_icon_release(self, event):
+        if not self._drag_data["moved"]:
+            self._minimize_to_tray()
+
+    ### Expand / collapse
+    def toggle(self):
+        self.expanded = not self.expanded
+        self._refresh_layout()
+
     ### Collapsed widget
     def _build_collapsed(self):
         W, H = self.COLLAPSED_W, self.COLLAPSED_H
         self.collapsed = tk.Frame(self, width = W, height = H)
         self.collapsed.pack_propagate(False) 
 
-        self.c_border = self.collapsedself.c_gap = _rect(self.collapsed, 2, 2, W-4, H-4, "")
+        self.c_border = self.collapsed
+        self.c_gap = _rect(self.collapsed, 2, 2, W-4, H-4, "")
         self.c_fill = _rect(self.collapsed, 4, 4, W-8, H-8, "")
         self.c_icon = _rect(self.collapsed, 8, 8, 20, 20, "")
         self.time_label = tk.Label(self.collapsed, text = format_mmss(self.remaining), font = pixel_font(13, bold = True), cursor = "hand2")
@@ -173,7 +212,7 @@ class Widget(tk.Tk):
         
         self.close_chip = make_close(f, 290, 13, 23, 23, lambda: (self.focus_set(), self.quit_app()), self._theme)
 
-        self.star_chip = make_chip(f, 263, 13, 23, 23, "âœ¦", lambda: (self.focus_set(), self.toggle_theme()), self._theme)
+        self.star_chip = make_chip(f, 263, 13, 23, 23, "✦", lambda: (self.focus_set(), self.toggle_theme()), self._theme)
 
         self.status_label = tk.Label(f, font = pixel_font(8))
         self.status_label.place(x = 9, y = 78, width = W - 18, height = 16)
@@ -217,7 +256,28 @@ class Widget(tk.Tk):
             border = _rect(f, 67 + i * 15, 299, 9, 9, "")
             inner = _rect(f, 69 + i * 15, 301, 5, 5, "")
             self.dots.append((border, inner))
-                             
+    
+    ### Controls
+    # Flips pause on and off and updates the button label
+    def toggle_pause(self):
+        self.manually_paused = not self.manually_paused
+        self.pause_btn.configure(text="START" if self.manually_paused else "PAUSE")
+        self._refresh_status()
+                                
+    # Restarts countdown from TIMER min
+    def reset_timer(self):
+        self.remaining = self.timer_duration
+        self.manually_paused = False
+        self.idle_paused = False
+        self.pause_btn.configure(text="PAUSE")
+        self._update_time_labels()
+        self._refresh_status()
+                
+    # Switches themes
+    def toggle_theme(self):
+        self.NSO_theme = not self.NSO_theme
+        apply_theme(self)
+
     ### Main loop
     # checks idle time and counts down then fires at 0 
     def _tick(self):
@@ -242,20 +302,20 @@ class Widget(tk.Tk):
         self._refresh_status()
         self.after(TICK_MS, self._tick)
 
-        # Updates status textstate
-        def _refresh_status(self):
-            t = self._theme()
-            if self.manually_paused:
-                status_text = "PAUSED"
-            elif self.idle_paused:
-                status_text = "PAUSED (IDLE)"
-            else:
-                status_text = "RUNNING"
+    # Updates status textstate
+    def _refresh_status(self):
+        t = self._theme()
+        if self.manually_paused:
+            status_text = "PAUSED"
+        elif self.idle_paused:
+            status_text = "PAUSED - IDLE"
+        else:
+            status_text = "RUNNING"
 
-            color = t["hover"] if status_text != "RUNNING" else t["accent"]
-            self.time_label.configure(fg=color)
-            self.big_time_label.configure(fg=color)
-            self.status_label.configure(text=status_text)
+        color = t["hover"] if status_text != "RUNNING" else t["accent"]
+        self.time_label.configure(fg=color)
+        self.big_time_label.configure(fg=color)
+        self.status_label.configure(text=status_text)
                 
     def _update_time_labels(self):
         txt = format_mmss(self.remaining)
@@ -273,4 +333,77 @@ class Widget(tk.Tk):
         self.popup_open = False
         self.remaining = self.timer_duration
         self._update_time_labels()
+                
+    ### System tray 
+    # Hides window and adds the icon to tray
+    def _minimize_to_tray(self):
+        self.withdraw()
+        menu = pystray.Menu(
+            pystray.MenuItem("Restore", self._on_tray_restore, default=True),
+            pystray.MenuItem("Quit", self._on_tray_quit),)
+        self._tray_icon = pystray.Icon(APP_TITLE, make_tray_icon(self._theme()), APP_TITLE, menu)
+
+        self._tray_icon.run_detached()
+        self._poll_tray_queue()
+
+    # RUn on tray's thread with a restore and quit queued for the Tk thread to pick up
+    def _on_tray_restore(self, icon, item):
+        self._tray_queue.put("restore")
+                            
+    def _on_tray_quit(self, icon, item):
+        self._tray_queue.put("quit")
+
+    # Drain tray commands and reschedule itself while minimized
+    def _poll_tray_queue(self):
+        try:
+            while True:
+                cmd = self._tray_queue.get_nowait()
+                if cmd == "restore":
+                    self._restore_from_tray()
+                elif cmd == "quit":
+                    self.quit_app()
+                    return      
+        except queue.Empty:
+            pass
+        
+        if self._tray_icon is not None:
+            self.after(150, self._poll_tray_queue)
                         
+    # Stops the tray icon and shows the window again
+    def _restore_from_tray(self):
+        if self._tray_icon is not None:
+            self._tray_icon.stop()
+            self._tray_icon = None 
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        
+    # Stops tray icon if app is closed
+    def quit_app(self):
+        if self._tray_icon is not None:
+            self._tray_icon.stop()
+            self._tray_icon = None
+            self.destroy()
+                    
+    # Reads input fields and restarts the countdown with the new durations
+    def apply_settings(self):
+        try:
+            new_timer_min = max(1, int(self.timer_spin.get()))
+            new_idle_min = max(1, int(self.idle_spin.get()))
+        except ValueError:
+            return
+        
+        new_timer_duration = new_timer_min * 60
+        self.idle_threshold = new_idle_min * 60
+
+        # Resets timer if TIMER was changed
+        if new_timer_duration != self.timer_duration:
+            self.timer_duration = new_timer_duration
+            self.remaining = self.timer_duration
+            self.idle_paused = False
+            self._update_time_labels()
+            self._refresh_status()
+
+    if __name__ == "__main__":
+        app = widget()
+        app.mainloop()
