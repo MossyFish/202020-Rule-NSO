@@ -4,6 +4,8 @@ import ctypes
 import os
 import tkinter as tk 
 
+from PIL import Image, ImageDraw
+
 # Pixel font used in NSO 
 PIXEL_FONT_FAMILY = "PixelMplus10"
 
@@ -105,6 +107,15 @@ def make_button(parent, x, y, w, h, text, command, get_theme):
     lbl.bind("<Enter>", lambda e: lbl.configure(bg=get_theme()["hover"]))
     lbl.bind("<Leave>", lambda e: lbl.configure(bg=get_theme()["fill"]))
     return lbl
+
+def make_tray_icon(theme):
+    size = 64
+    pad = 12
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([pad, pad, size - pad, size - pad],
+                    fill=theme["fill"], outline=theme["border"], width=6)
+    return img
 
 def make_chip(parent, x, y, w, h, text, command, get_theme):
     lbl = tk.Label(parent, text=text, font=pixel_font(9, bold=True), cursor="hand2", highlightthickness=2)
