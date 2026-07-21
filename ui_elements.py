@@ -82,7 +82,7 @@ def resize_window(win, w, h):
 
 def bind_icon_square(icon, on_press, on_drag, on_release, get_theme): 
     icon.configure(cursor="hand2")
-    icon.bind("<ButtonPress-1", on_press)
+    icon.bind("<ButtonPress-1>", on_press)
     icon.bind("<B1-Motion>", on_drag)
     icon.bind("<ButtonRelease-1", on_release)
     icon.bind("<Enter>", lambda e: icon.configure(bg=get_theme()["icon_hover"]))
@@ -154,12 +154,13 @@ def apply_theme(app):
     for spin in (app.timer_spin, app.idle_spin):
         spin.configure(bg=t["fill"], fg=t["accent"], buttonbackground=t["fill"])
 
-        app.footer_chip.configure(bg=t["hover"], highlightbackground=t["border"])
+    app.footer_chip.configure(bg=t["hover"], highlightbackground=t["border"])
+
     for border, inner in app.dots:
             border.configure(bg=t["border"])
             inner.configure(bg=t["hover"])
             
-            app._refresh_status()
+    app._refresh_status()
 
 # Reminder popup
 class ReminderPopup(tk.Toplevel):
