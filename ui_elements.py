@@ -39,7 +39,7 @@ THEME = {
 }
 
 # Idle detection 
-class LAST_INPUT(ctypes.Structue):
+class LAST_INPUT(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
 # Get seconds since the last system wide input 
@@ -161,9 +161,9 @@ def apply_theme(app):
             
             app._refresh_status()
 
-    # Reminder popup
-    class ReminderPopup(tk.Toplevel):
-        W, H = 486, 179
+# Reminder popup
+class ReminderPopup(tk.Toplevel):
+    W, H = 486, 179
         
     # Draw popup layout with the theme 
     def __init__(self, master, minutes_passed, on_close, get_theme):
@@ -189,7 +189,7 @@ def apply_theme(app):
         self.r_content = _rect(self.body, 7, 43, self.W - 14, 120, t["panel"])
 
         self.r_icon = _rect(self.body, 11, 11, 20, 20, t["accent"])
-        self.alert_label = tk.Label(self.body, text="ALERT", font=pixel_font(10, bold=True), bg=t["popup_titlebar"], g=t["accent"], anchor="w")
+        self.alert_label = tk.Label(self.body, text="ALERT", font=pixel_font(10, bold=True), bg=t["popup_titlebar"], fg=t["accent"], anchor="w")
         self.alert_label.place(x=37, y=11, width=384, height=20)
 
         self.min_btn = self._chip(427, 11, 19, 18, "-", t["popup_titlebar"], self._close, anchor="sw", padx=3, pady=1)
@@ -211,11 +211,11 @@ def apply_theme(app):
             inner = _rect(self.body, 73 + i * 12, 169, 5, 5, t["hover"])
             self.dots.append((border, inner))
         
-            self.grab_set()
-            self.focus_force()
-            self._final_x = None    
-            self._pop_in()
-                
+        self.grab_set()
+        self.focus_force()
+        self._final_x = None    
+        self._pop_in()
+     
     # Popup minimize/ close icons
     def _chip(self, x, y, w, h, text, bg, command, anchor="center", padx=0, pady=0):
         t = self.get_theme()
