@@ -8,7 +8,8 @@ import subprocess
 import sys
 import tkinter as tk
 from tkinter import messagebox
-from ui_elements import widget
+import os
+import winreg
 
 REQUIRED_PACKAGES = {"pystray": "pystray", "PIL": "Pillow"}
 
@@ -28,7 +29,7 @@ def _ensure_dependencies():
         messagebox.showerror(
             "20-20-20 Reminder Tool",
             "Couldn't automatically install required packages: " + ", ".join(missing) +
-            "\n\Run this in your terminal:\n"
+            "\n\nRun this in your terminal:\n"
             "pip install -r requirements.txt\n\n" + result.stderr[-500:]
         )
         sys.exit(1)
@@ -39,7 +40,7 @@ import pystray
 
 from ui_elements import (
     THEME, ReminderPopup, _load_pixel_fonts, _rect, apply_theme,
-    bind_icon_square, format_mmss, get_sec, make_button,
+    bind_icon_square, format_mmss, get_sec, make_button, make_toggle,
     make_chip, make_close, make_tray_icon, pixel_font,
     place_window, resize_window,
 )
@@ -55,6 +56,42 @@ except Exception:
         except Exception:
             pass
 
+AUTOSTART_NAME = "EyeProtector"
+AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+ 
+def _autostart_command():
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(base_dir, "eye_protector.py")
+    pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    
+    if not os.path.exists(pythonw):
+        pythonw = sys.executable
+    
+    return f'"{pythonw}" "{script_path}"'     
+              
+def is_autostart_enabled():
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY, 0, winreg.KEY_READ)
+        winreg.QueryValueEx(key, AUTOSTART_NAME)
+        winreg.CloseKey(key)
+        return True
+    except FileNotFoundError:
+            return False 
+    
+def set_autostart(enabled):
+    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE)
+    if enabled:
+        winreg.SetValueEx(key, AUTOSTART_NAME, 0, winreg.REG_SZ, _autostart_command())
+    else:
+        try:
+            winreg.DeleteValue(key, AUTOSTART_NAME)
+        except FileNotFoundError:
+            pass
+    winreg.CloseKey(key)
+
 ### Default settings
 TIMER = 20
 IDLE = 5
@@ -68,7 +105,7 @@ NSO_DEFAULT = True
 ### Floating widget
 class Widget(tk.Tk):
     COLLAPSED_W, COLLAPSED_H = 126, 36
-    EXPANDED_W, EXPANDED_H = 329, 311
+    EXPANDED_W, EXPANDED_H = 329, 335
 
     # Creates the window and both its layouts
     def __init__(self):
@@ -137,8 +174,9 @@ class Widget(tk.Tk):
         dy = event.y - self._drag_data["y"]
         if abs(dx) > DRAG_CLICK_THRESHOLD or abs(dy) > DRAG_CLICK_THRESHOLD:
             self._drag_data["moved"] = True
-            x = self.winfo_x() + dx
-            y = self.winfo_y() + dy
+        
+        x = self.winfo_x() + dx
+        y = self.winfo_y() + dy
         
         self.geometry(f"+{x}+{y}")
 
@@ -193,8 +231,8 @@ class Widget(tk.Tk):
         self.e_titlebar_border = _rect(f, 7, 7, W-14, 35, "")
         self.e_titlebar = _rect(f, 9, 9, W-18, 31, "")
 
-        self.e_panel_border = _rect(f, 7, 47, W-14, 245, "")
-        self.e_panel = _rect(f, 9, 49, W-18, 241, "")
+        self.e_panel_border = _rect(f, 7, 47, W-14, 265, "")         
+        self.e_panel = _rect(f, 9, 49, W-18, 261, "")           
 
         self.e_icon = _rect(f, 15, 14, 21, 21, "")
 
@@ -215,34 +253,34 @@ class Widget(tk.Tk):
         self.star_chip = make_chip(f, 263, 13, 23, 23, "✦", lambda: (self.focus_set(), self.toggle_theme()), self._theme)
 
         self.status_label = tk.Label(f, font = pixel_font(8))
-        self.status_label.place(x = 9, y = 78, width = W - 18, height = 16)
+        self.status_label.place(x = 9, y = 76, width = W - 18, height = 16)
         self.status_label.bind("<Button-1>", lambda e: self.focus_set())
                                
         self.big_time_label = tk.Label(f, text = format_mmss(self.remaining),font = pixel_font(22, bold = True))
-        self.big_time_label.place(x = 9, y = 96, width = W - 18, height = 38)
+        self.big_time_label.place(x = 9, y = 94, width = W - 18, height = 38)
         self.big_time_label.bind("<Button-1>", lambda e: self.focus_set())
 
-        self.pause_shadow = _rect(f, 64, 156, 96, 35, "")
-        self.pause_btn = make_button(f, 61, 153, 96, 35, "PAUSE", lambda: (self.focus_set(), self.toggle_pause()), self._theme)
+        self.pause_shadow = _rect(f, 64, 150, 96, 35, "")
+        self.pause_btn = make_button(f, 61, 147, 96, 35, "PAUSE", lambda: (self.focus_set(), self.toggle_pause()), self._theme)
 
-        self.reset_shadow = _rect(f, 174, 156, 96, 36, "")
-        self.reset_btn = make_button(f, 171, 153, 96, 36, "RESET", lambda: (self.focus_set(), self.reset_timer()), self._theme)
+        self.reset_shadow = _rect(f, 174, 150, 96, 36, "")
+        self.reset_btn = make_button(f, 171, 147, 96, 36, "RESET", lambda: (self.focus_set(), self.reset_timer()), self._theme)
 
         self.timer_label = tk.Label(f, text = "REMIND EVERY (MIN)", font = pixel_font(10), anchor = "w")
-        self.timer_label.place(x = 20, y = 203, width = 210, height = 20)
+        self.timer_label.place(x = 20, y = 199, width = 210, height = 20)
         self.timer_label.bind("<Button-1>", lambda e: self.focus_set())
         self.timer_spin = tk.Spinbox(f, from_ = 1, to = 180, justify = "center", font = pixel_font(11), command = self.apply_settings, relief = "flat")
-        self.timer_spin.place(x = 234, y = 200, width = 70, height = 30)
+        self.timer_spin.place(x = 234, y = 196, width = 70, height = 26)
         self.timer_spin.delete(0, "end")  
         self.timer_spin.insert(0, str(self.timer_duration // 60))
         self.timer_spin.bind("<FocusOut>", lambda e: self.apply_settings())
         self.timer_spin.bind("<Return>", lambda e: self.apply_settings())
         
         self.idle_label = tk.Label(f, text = "IDLE PAUSE (MIN)", font = pixel_font(10), anchor = "w")
-        self.idle_label.place(x = 20, y = 245, width = 210, height = 20)
+        self.idle_label.place(x = 20, y = 241, width = 210, height = 20)
         self.idle_label.bind("<Button-1>", lambda e: self.focus_set())
         self.idle_spin = tk.Spinbox(f, from_ = 1, to = 60, justify = "center", font = pixel_font(11), command = self.apply_settings,relief = "flat")
-        self.idle_spin.place(x = 234, y = 242, width = 70, height = 30)
+        self.idle_spin.place(x = 234, y = 238, width = 70, height = 26)
 
         self.idle_spin.delete(0, "end")
         self.idle_spin.insert(0, str(self.idle_threshold // 60))
@@ -250,13 +288,25 @@ class Widget(tk.Tk):
         self.idle_spin.bind("<Return>", lambda e: self.apply_settings())
 
         self.footer_chip = tk.Label(f, highlightthickness = 2)
-        self.footer_chip.place(x = 10, y = 299, width = 51, height = 9)
+        self.footer_chip.place(x = 10, y = 320, width = 51, height = 14)
+        
         self.dots = []
         for i in range(3):
-            border = _rect(f, 67 + i * 15, 299, 9, 9, "")
-            inner = _rect(f, 69 + i * 15, 301, 5, 5, "")
+            border = _rect(f, 67 + i * 15, 320, 9, 9, "")
+            inner = _rect(f, 69 + i * 15, 322, 5, 5, "")
             self.dots.append((border, inner))
-    
+
+        self.autostart_label = tk.Label(f, text="AUTOSTART ON BOOT", font=pixel_font(10), anchor="w")
+        self.autostart_label.place(x=20, y=280, width=174, height=20)
+        self.autostart_label.bind("<Button-1>", lambda e: self.focus_set())
+
+        self.autostart_toggle = make_toggle(
+            f, 236, 278, 66, 26,
+            is_autostart_enabled(),
+            lambda state: (self.focus_set(), self.toggle_autostart(state)),
+            self._theme
+        )
+
     ### Controls
     # Flips pause on and off and updates the button label
     def toggle_pause(self):
@@ -278,7 +328,11 @@ class Widget(tk.Tk):
         self.NSO_theme = not self.NSO_theme
         apply_theme(self)
 
+    def toggle_autostart(self, enabled):
+        set_autostart(enabled)
+
     ### Main loop
+    
     # checks idle time and counts down then fires at 0 
     def _tick(self):
         idle = get_sec()
@@ -296,7 +350,7 @@ class Widget(tk.Tk):
         
             if self.remaining <= 0:
                 self._show_reminder()
-                self._update_time_labels()  
+            self._update_time_labels()  
         
 
         self._refresh_status()
@@ -383,7 +437,7 @@ class Widget(tk.Tk):
         if self._tray_icon is not None:
             self._tray_icon.stop()
             self._tray_icon = None
-            self.destroy()
+        self.destroy()
                     
     # Reads input fields and restarts the countdown with the new durations
     def apply_settings(self):
@@ -401,9 +455,9 @@ class Widget(tk.Tk):
             self.timer_duration = new_timer_duration
             self.remaining = self.timer_duration
             self.idle_paused = False
-            self._update_time_labels()
-            self._refresh_status()
+        self._update_time_labels()
+        self._refresh_status()
 
-    if __name__ == "__main__":
-        app = widget()
-        app.mainloop()
+if __name__ == "__main__":
+    app = Widget()
+    app.mainloop()

@@ -3,13 +3,12 @@
 import ctypes 
 import os
 import tkinter as tk 
-
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk, ImageFont
 
 # Pixel font used in NSO 
 PIXEL_FONT_FAMILY = "PixelMplus10"
 
-# Secret little font load 
+# Font load 
 def _load_pixel_fonts():
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -86,7 +85,7 @@ def bind_icon_square(icon, on_press, on_drag, on_release, get_theme):
     icon.configure(cursor="hand2")
     icon.bind("<ButtonPress-1>", on_press)
     icon.bind("<B1-Motion>", on_drag)
-    icon.bind("<ButtonRelease-1", on_release)
+    icon.bind("<ButtonRelease-1>", on_release)
     icon.bind("<Enter>", lambda e: icon.configure(bg=get_theme()["icon_hover"]))
     icon.bind("<Leave>", lambda e: icon.configure(bg=get_theme()["accent"]))
 
@@ -99,6 +98,110 @@ def make_close(parent, x, y, w, h, command, get_theme):
     cv.bind("<Enter>", lambda e: cv.configure(bg=get_theme()["hover"]))
     cv.bind("<Leave>", lambda e: cv.configure(bg=get_theme()["fill"]))
     return cv
+
+def _render_toggle_image(t, state, w, h, scale=4, progress=1.0):
+    W, H = w * scale, h * scale    
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    r = H // 2
+    
+    track_color = t["hover"] if state else t["fill"]   
+    border_color = t["border"]
+    border_w = scale * 2
+    
+    draw.rounded_rectangle([0, 0, W-1, H-1], radius=r, fill=border_color)
+    draw.rounded_rectangle([border_w, border_w, W-1-border_w, H-1-border_w], radius=r-border_w, fill=track_color)
+    
+    # Draw text
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        font_path = os.path.join(base_dir, "fonts", "PixelMplus10-Bold.ttf")
+        font = ImageFont.truetype(font_path, 10 * scale)
+    except Exception:
+        font = ImageFont.load_default()
+
+    text = "ON" if state else "OFF"
+    
+    # Center text
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    
+    if state:
+        text_x = (W - H) // 2 - text_w // 2 + scale * 2
+    else:
+        text_x = W - (W - H) // 2 - text_w // 2 - scale * 2
+        
+    text_y = (H - text_h) // 2 - scale * 2 
+
+    draw.text((text_x, text_y), text, fill=t["accent"], font=font)
+    
+    # Draw sliding knob
+    knob_d = H - scale * 8
+    kx_off = scale * 4
+    kx_on = W - H + scale * 4
+    
+    kx = kx_off + (kx_on - kx_off) * progress
+    ky = scale * 4
+    
+    draw.ellipse([kx, ky, kx + knob_d, ky + knob_d], fill=t["panel"], outline=border_color, width=border_w)
+    
+    # Please be smooth
+    img = img.resize((w, h), Image.LANCZOS)
+    return ImageTk.PhotoImage(img)
+
+
+def make_toggle(parent, x, y, w, h, initial, command, get_theme):
+    frame = tk.Frame(parent)
+    frame.place(x=x, y=y, width=w, height=h)
+
+    # The image switch
+    switch = tk.Label(frame, cursor="hand2", bd=0)
+    switch.place(x=0, y=0, width=w, height=h)
+    switch.state = initial   
+    switch.anim_progress = 1.0 if initial else 0.0
+    switch.anim_id = None
+    
+    def render(progress):
+        t = get_theme()
+        img = _render_toggle_image(t, switch.state, w, h, scale=4, progress=progress)
+        switch.image = img
+        switch.configure(image=img, bg=t["panel"])
+        frame.configure(bg=t["panel"])
+
+    def animate():
+        target = 1.0 if switch.state else 0.0
+        diff = target - switch.anim_progress
+        
+        if abs(diff) < 0.05:
+            switch.anim_progress = target
+            render(switch.anim_progress)
+            switch.anim_id = None
+        else:
+            switch.anim_progress += diff * 0.4
+            render(switch.anim_progress)
+            switch.anim_id = parent.after(16, animate)
+
+    def redraw():
+        if switch.anim_id is not None:
+            parent.after_cancel(switch.anim_id)
+            switch.anim_id = None
+        switch.anim_progress = 1.0 if switch.state else 0.0
+        render(switch.anim_progress)
+        
+    def on_click(e):
+        switch.state = not switch.state
+        if switch.anim_id is not None:
+            parent.after_cancel(switch.anim_id)
+            
+        switch.anim_id = parent.after(16, animate)
+        command(switch.state)
+        
+    switch.bind("<Button-1>", on_click)
+    frame.redraw = redraw
+    
+    render(switch.anim_progress)
+    return frame
 
 def make_button(parent, x, y, w, h, text, command, get_theme):
     lbl = tk.Label(parent, text=text, font=pixel_font(10, bold=True), cursor="hand2", highlightthickness=1)
@@ -170,6 +273,10 @@ def apply_theme(app):
     for border, inner in app.dots:
             border.configure(bg=t["border"])
             inner.configure(bg=t["hover"])
+
+    # Auto start button
+    app.autostart_label.configure(bg=t["panel"], fg=t["accent"])
+    app.autostart_toggle.redraw()
             
     app._refresh_status()
 
@@ -258,26 +365,27 @@ class ReminderPopup(tk.Toplevel):
             sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
             self._final_x = (sw - self.W) // 2
             self._final_y = (sh - self.H) // 2
-            frac = (step + 1) / total    
-            try:
-                self.attributes("-alpha", min(1.0, frac))
-            except tk.TclError:
-                pass    
-            w = max(40, int(self.W * (0.6 + 0.4 * frac)))
-            h = max(30, int(self.H * (0.6 + 0.4 * frac)))
-            x = self._final_x + (self.W - w) // 2
-            y = self._final_y + (self.H - h) // 2
-            self.geometry(f"{w}x{h}+{x}+{y}")
-            if step < total - 1:
-                self.after(15, lambda: self._pop_in(step + 1, total))
-            else:
-                self.geometry(f"{self.W}x{self.H}+{self._final_x}+{self._final_y}")
+
+        frac = (step + 1) / total    
+        try:
+            self.attributes("-alpha", min(1.0, frac))
+        except tk.TclError:
+            pass    
+        w = max(40, int(self.W * (0.6 + 0.4 * frac)))
+        h = max(30, int(self.H * (0.6 + 0.4 * frac)))
+        x = self._final_x + (self.W - w) // 2
+        y = self._final_y + (self.H - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+        if step < total - 1:
+            self.after(15, lambda: self._pop_in(step + 1, total))
+        else:
+            self.geometry(f"{self.W}x{self.H}+{self._final_x}+{self._final_y}")
 
     # Callback then destroys the popup
     def _close(self):
         self.on_close()
         self.destroy()
-                                
 
 
             

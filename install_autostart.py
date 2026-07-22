@@ -17,9 +17,9 @@ def find_pythonw():
     return sys.executable
 
 def main():
-    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "eye_protector.pyw"))
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "reminderapp.pyw"))
     if not os.path.exists(script_path):
-        raise SystemExit(f"Couldnt find eye_protector.pyw. " f"(looked in {script_path}).")
+        raise SystemExit(f"Couldnt find reminderapp.pyw. " f"(looked in {script_path}).")
     
     pythonw = find_pythonw()
     command = f'"{pythonw}" "{script_path}"'
