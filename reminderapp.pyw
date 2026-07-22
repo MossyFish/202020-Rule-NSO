@@ -72,23 +72,53 @@ def _autostart_command():
     return f'"{pythonw}" "{script_path}"'   
               
 def is_autostart_enabled():
+    script_path = os.path.abspath(__file__)
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY, 0, winreg.KEY_READ)
-        winreg.QueryValueEx(key, AUTOSTART_NAME)
+        found = False
+        i = 0
+        while True:
+            try:
+                name, value, _ = winreg.EnumValue(key, i)
+                if script_path in value or name == AUTOSTART_NAME:
+                    found = True
+                    break
+                i += 1
+            except OSError:
+                break
         winreg.CloseKey(key)
-        return True
+        return found
     except FileNotFoundError:
-            return False 
-    
+        return False
+
 def set_autostart(enabled):
-    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE)
+    script_path = os.path.abspath(__file__)
+    # Need read and set permissions to scan and delete
+    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE)
+    
+    # look for entries to reminder app 
+    to_delete = []
+    i = 0
+    while True:
+        try:
+            name, value, _ = winreg.EnumValue(key, i)
+            if script_path in value or name in [AUTOSTART_NAME, "EyeProtector2020"]:
+                to_delete.append(name)
+            i += 1
+        except OSError:
+            break
+            
+    # delete entries
+    for name in to_delete:
+        try:
+            winreg.DeleteValue(key, name)
+        except OSError:
+            pass
+            
+    # write a new one if its on
     if enabled:
         winreg.SetValueEx(key, AUTOSTART_NAME, 0, winreg.REG_SZ, _autostart_command())
-    else:
-        try:
-            winreg.DeleteValue(key, AUTOSTART_NAME)
-        except FileNotFoundError:
-            pass
+        
     winreg.CloseKey(key)
 
 ### Default settings

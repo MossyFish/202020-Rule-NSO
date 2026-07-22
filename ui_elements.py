@@ -69,7 +69,7 @@ def _text(parent, x, y, w, h, text, bg, fg, font, anchor = "center"):
     return lbl
 
 # Spawns the window in the top right
-def place_window(win, w, h, margin=80, top=40):
+def place_window(win, w, h, margin=200, top=40):
     sw = win.winfo_screenwidth()
     x = sw - w - margin
     win.geometry(f"{w}x{h}+{x}+{top}")
@@ -116,7 +116,7 @@ def _render_toggle_image(t, state, w, h, scale=4, progress=1.0):
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         font_path = os.path.join(base_dir, "fonts", "PixelMplus10-Bold.ttf")
-        font = ImageFont.truetype(font_path, 10 * scale)
+        font = ImageFont.truetype(font_path, 14 * scale)
     except Exception:
         font = ImageFont.load_default()
 
