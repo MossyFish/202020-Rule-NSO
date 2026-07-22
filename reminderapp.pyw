@@ -63,14 +63,13 @@ def _autostart_command():
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'
     
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    script_path = os.path.join(base_dir, "eye_protector.py")
+    script_path = os.path.abspath(__file__)
     pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
     
     if not os.path.exists(pythonw):
         pythonw = sys.executable
     
-    return f'"{pythonw}" "{script_path}"'     
+    return f'"{pythonw}" "{script_path}"'   
               
 def is_autostart_enabled():
     try:
