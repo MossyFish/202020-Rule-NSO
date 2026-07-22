@@ -42,6 +42,11 @@ pip install -r requirements.txt
 
 Important note: this program only works on windows because I only use windows (for now).
 
+## Demo
+
+https://github.com/user-attachments/assets/6a680500-3eab-4a1b-aec1-00c7ca85cc95
+
+
 ## Font Credits
 
 I pulled the PixelMPlus10 bold and regular fonts from lezzthanthree's [Needy-Streamer-Overload](https://github.com/lezzthanthree/Needy-Streamer-Overload/tree/master/%40Resources/Fonts) repo. 
