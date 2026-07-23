@@ -45,16 +45,21 @@ from ui_elements import (
     place_window, resize_window,
 )
  
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-5))
-    except Exception:
+def _set_dpi_awareness():
+    # the right API changes across diff windows versions so try all 
+    attempts = (
+        lambda: ctypes.windll.shcore.SetProcessDpiAwareness(1),
+        lambda: ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-5)),
+        lambda: ctypes.windll.shcore.SetProcessDpiAwareness(0),
+    )
+    for attempt in attempts:
         try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(0)
+            attempt()
+            return
         except Exception:
             pass
+
+_set_dpi_awareness()
 
 AUTOSTART_NAME = "EyeProtector"
 AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"

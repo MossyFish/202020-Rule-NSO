@@ -47,7 +47,7 @@ THEME = {
 class LAST_INPUT(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
-# Get seconds since the last system wide input 
+# Get seconds since the last system wide input
 def get_sec() -> float:
     lii = LAST_INPUT()
     lii.cbSize = ctypes.sizeof(LAST_INPUT) 
@@ -84,7 +84,6 @@ def resize_window(win, w, h):
     win.geometry(f"{w}x{h}+{x}+{y}")
 
 ## Buttons 
-
 def bind_icon_square(icon, on_press, on_drag, on_release, get_theme): 
     icon.configure(cursor="hand2")
     icon.bind("<ButtonPress-1>", on_press)
@@ -103,57 +102,69 @@ def make_close(parent, x, y, w, h, command, get_theme):
     cv.bind("<Leave>", lambda e: cv.configure(bg=get_theme()["fill"]))
     return cv
 
-def _render_toggle_image(t, state, w, h, scale=4, progress=1.0):
-    W, H = w * scale, h * scale    
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    r = H // 2
-    
-    track_color = t["hover"] if state else t["fill"]   
-    border_color = t["border"]
-    border_w = scale * 2
-    
-    draw.rounded_rectangle([0, 0, W-1, H-1], radius=r, fill=border_color)
-    draw.rounded_rectangle([border_w, border_w, W-1-border_w, H-1-border_w], radius=r-border_w, fill=track_color)
-    
-    # Draw text
+# redrawing this from scratch on every animation frame means re-reading the
+# font file off disk ~60 times per click, which was noticeably janky - cache it
+_toggle_font_cache = {}
+
+def _get_toggle_font(scale):
+    if scale in _toggle_font_cache:
+        return _toggle_font_cache[scale]
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         font_path = os.path.join(base_dir, "fonts", "PixelMplus10-Bold.ttf")
         font = ImageFont.truetype(font_path, 14 * scale)
     except Exception:
         font = ImageFont.load_default()
+    _toggle_font_cache[scale] = font
+    return font
 
-    text = "ON" if state else "OFF"
-    
-    # Center text
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    
-    if state:
-        text_x = (W - H) // 2 - text_w // 2 + scale * 2
+
+def _toggle_knob_x(canvas_w, canvas_h, scale, progress):
+    left_x = scale * 4
+    right_x = canvas_w - canvas_h + scale * 4
+    return left_x + (right_x - left_x) * progress
+
+
+def _render_toggle_image(colors, is_on, w, h, scale=4, progress=1.0):
+    # draw big then shrink it to round the corners
+    canvas_w, canvas_h = w * scale, h * scale
+    img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    corner_radius = canvas_h // 2
+    border_px = scale * 2
+
+    track_color = colors["hover"] if is_on else colors["fill"]
+    border_color = colors["border"]
+
+    draw.rounded_rectangle([0, 0, canvas_w - 1, canvas_h - 1], radius=corner_radius, fill=border_color)
+    draw.rounded_rectangle(
+        [border_px, border_px, canvas_w - 1 - border_px, canvas_h - 1 - border_px],
+        radius=corner_radius - border_px, fill=track_color,
+    )
+
+    label = "ON" if is_on else "OFF"
+    font = _get_toggle_font(scale)
+    bbox = draw.textbbox((0, 0), label, font=font)
+    label_w, label_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    if is_on:
+        label_x = (canvas_w - canvas_h) // 2 - label_w // 2 + scale * 2
     else:
-        text_x = W - (W - H) // 2 - text_w // 2 - scale * 2
-        
-    text_y = (H - text_h) // 2 - scale * 2 
+        label_x = canvas_w - (canvas_w - canvas_h) // 2 - label_w // 2 - scale * 2
+    label_y = (canvas_h - label_h) // 2 - scale * 2
 
-    draw.text((text_x, text_y), text, fill=t["accent"], font=font)
-    
-    # Draw sliding knob
-    knob_d = H - scale * 8
-    kx_off = scale * 4
-    kx_on = W - H + scale * 4
-    
-    kx = kx_off + (kx_on - kx_off) * progress
-    ky = scale * 4
-    
-    draw.ellipse([kx, ky, kx + knob_d, ky + knob_d], fill=t["panel"], outline=border_color, width=border_w)
-    
-    # Please be smooth
+    draw.text((label_x, label_y), label, fill=colors["accent"], font=font)
+
+    knob_diameter = canvas_h - scale * 8
+    knob_x = _toggle_knob_x(canvas_w, canvas_h, scale, progress)
+    knob_y = scale * 4
+    draw.ellipse(
+        [knob_x, knob_y, knob_x + knob_diameter, knob_y + knob_diameter],
+        fill=colors["panel"], outline=border_color, width=border_px,
+    )
+
     img = img.resize((w, h), Image.LANCZOS)
     return ImageTk.PhotoImage(img)
-
 
 def make_toggle(parent, x, y, w, h, initial, command, get_theme):
     frame = tk.Frame(parent)
@@ -167,11 +178,11 @@ def make_toggle(parent, x, y, w, h, initial, command, get_theme):
     switch.anim_id = None
     
     def render(progress):
-        t = get_theme()
-        img = _render_toggle_image(t, switch.state, w, h, scale=4, progress=progress)
+        colors = get_theme()
+        img = _render_toggle_image(colors, switch.state, w, h, scale=4, progress=progress)
         switch.image = img
-        switch.configure(image=img, bg=t["panel"])
-        frame.configure(bg=t["panel"])
+        switch.configure(image=img, bg=colors["panel"])
+        frame.configure(bg=colors["panel"])
 
     def animate():
         target = 1.0 if switch.state else 0.0
@@ -338,7 +349,7 @@ class ReminderPopup(tk.Toplevel):
         self.focus_force()
         self._final_x = None    
         self._pop_in()
-     
+
     # Popup minimize/ close icons
     def _chip(self, x, y, w, h, text, bg, command, anchor="center", padx=0, pady=0):
         t = self.get_theme()
