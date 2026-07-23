@@ -40,7 +40,11 @@ You can also install them on your own before running:
 pip install -r requirements.txt
 ```
 
-Important note: this program only works on windows because I only use windows (for now).
+Notes:
+
+This program only works on windows because I only use windows (for now).
+
+AI assistance used in editing and debugging the code 🤧
 
 ## Demo
 
