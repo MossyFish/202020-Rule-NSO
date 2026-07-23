@@ -102,120 +102,65 @@ def make_close(parent, x, y, w, h, command, get_theme):
     cv.bind("<Leave>", lambda e: cv.configure(bg=get_theme()["fill"]))
     return cv
 
-# redrawing this from scratch on every animation frame means re-reading the
-# font file off disk ~60 times per click, which was noticeably janky - cache it
-_toggle_font_cache = {}
-
-def _get_toggle_font(scale):
-    if scale in _toggle_font_cache:
-        return _toggle_font_cache[scale]
-    try:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(base_dir, "fonts", "PixelMplus10-Bold.ttf")
-        font = ImageFont.truetype(font_path, 14 * scale)
-    except Exception:
-        font = ImageFont.load_default()
-    _toggle_font_cache[scale] = font
-    return font
-
-
-def _toggle_knob_x(canvas_w, canvas_h, scale, progress):
-    left_x = scale * 4
-    right_x = canvas_w - canvas_h + scale * 4
-    return left_x + (right_x - left_x) * progress
-
-
-def _render_toggle_image(colors, is_on, w, h, scale=4, progress=1.0):
-    # draw big then shrink it to round the corners
-    canvas_w, canvas_h = w * scale, h * scale
-    img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    corner_radius = canvas_h // 2
-    border_px = scale * 2
-
-    track_color = colors["hover"] if is_on else colors["fill"]
-    border_color = colors["border"]
-
-    draw.rounded_rectangle([0, 0, canvas_w - 1, canvas_h - 1], radius=corner_radius, fill=border_color)
-    draw.rounded_rectangle(
-        [border_px, border_px, canvas_w - 1 - border_px, canvas_h - 1 - border_px],
-        radius=corner_radius - border_px, fill=track_color,
-    )
-
-    label = "ON" if is_on else "OFF"
-    font = _get_toggle_font(scale)
-    bbox = draw.textbbox((0, 0), label, font=font)
-    label_w, label_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-
-    if is_on:
-        label_x = (canvas_w - canvas_h) // 2 - label_w // 2 + scale * 2
-    else:
-        label_x = canvas_w - (canvas_w - canvas_h) // 2 - label_w // 2 - scale * 2
-    label_y = (canvas_h - label_h) // 2 - scale * 2
-
-    draw.text((label_x, label_y), label, fill=colors["accent"], font=font)
-
-    knob_diameter = canvas_h - scale * 8
-    knob_x = _toggle_knob_x(canvas_w, canvas_h, scale, progress)
-    knob_y = scale * 4
-    draw.ellipse(
-        [knob_x, knob_y, knob_x + knob_diameter, knob_y + knob_diameter],
-        fill=colors["panel"], outline=border_color, width=border_px,
-    )
-
-    img = img.resize((w, h), Image.LANCZOS)
-    return ImageTk.PhotoImage(img)
-
 def make_toggle(parent, x, y, w, h, initial, command, get_theme):
     frame = tk.Frame(parent)
     frame.place(x=x, y=y, width=w, height=h)
 
-    # The image switch
-    switch = tk.Label(frame, cursor="hand2", bd=0)
-    switch.place(x=0, y=0, width=w, height=h)
-    switch.state = initial   
-    switch.anim_progress = 1.0 if initial else 0.0
-    switch.anim_id = None
-    
-    def render(progress):
-        colors = get_theme()
-        img = _render_toggle_image(colors, switch.state, w, h, scale=4, progress=progress)
-        switch.image = img
-        switch.configure(image=img, bg=colors["panel"])
-        frame.configure(bg=colors["panel"])
+    cv = tk.Canvas(frame, width=w, height=h, highlightthickness=0, bd=0, cursor="hand2")
+    cv.pack(fill="both", expand=True)
 
-    def animate():
-        target = 1.0 if switch.state else 0.0
-        diff = target - switch.anim_progress
+    state = initial
+    progress = 1.0 if initial else 0.0
+    anim_id = None
+
+    def draw():
+        t = get_theme()
+        cv.delete("all")
         
+        # Track colors n text based on state
+        bg_col = t["hover"] if state else t["fill"]
+        cv.create_rounded_rect = lambda *args, **kwargs: cv.create_rectangle(*args, **kwargs) # fallback styling
+        
+        cv.create_rectangle(0, 0, w, h, fill=t["border"], outline="")
+        cv.create_rectangle(2, 2, w-1, h-1, fill=bg_col, outline="")
+
+        txt = "ON" if state else "OFF"
+        txt_x = w * 0.3 if state else w * 0.7
+        cv.create_text(txt_x, h/2, text=txt, font=pixel_font(8, bold=True), fill=t["accent"])
+
+        # Sliding knob
+        knob_w = h - 6
+        min_x = 3
+        max_x = w - knob_w - 3
+        knob_x = min_x + (max_x - min_x) * progress
+        
+        cv.create_rectangle(knob_x, 3, knob_x + knob_w, h - 3, fill=t["panel"], outline=t["border"])
+
+    def animate(target_prog):
+        nonlocal progress, anim_id
+        diff = target_prog - progress
         if abs(diff) < 0.05:
-            switch.anim_progress = target
-            render(switch.anim_progress)
-            switch.anim_id = None
+            progress = target_prog
+            draw()
+            anim_id = None
         else:
-            switch.anim_progress += diff * 0.4
-            render(switch.anim_progress)
-            switch.anim_id = parent.after(16, animate)
+            progress += diff * 0.35
+            draw()
+            anim_id = parent.after(16, lambda: animate(target_prog))
 
-    def redraw():
-        if switch.anim_id is not None:
-            parent.after_cancel(switch.anim_id)
-            switch.anim_id = None
-        switch.anim_progress = 1.0 if switch.state else 0.0
-        render(switch.anim_progress)
-        
-    def on_click(e):
-        switch.state = not switch.state
-        if switch.anim_id is not None:
-            parent.after_cancel(switch.anim_id)
-            
-        switch.anim_id = parent.after(16, animate)
-        command(switch.state)
-        
-    switch.bind("<Button-1>", on_click)
-    frame.redraw = redraw
+    def trigger(e):
+        nonlocal state, anim_id
+        state = not state
+        if anim_id:
+            parent.after_cancel(anim_id)
+        target = 1.0 if state else 0.0
+        animate(target)
+        command(state)
+
+    cv.bind("<Button-1>", trigger)
     
-    render(switch.anim_progress)
+    frame.redraw = lambda: draw()
+    draw()
     return frame
 
 def make_button(parent, x, y, w, h, text, command, get_theme):
