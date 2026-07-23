@@ -31,7 +31,9 @@ This project exists because Microsofts 20-20-20 reminder app paywalls every usef
 <img width="44%"  alt="image" src="https://github.com/user-attachments/assets/da57d1ce-a8b0-45fa-ab3e-753785dba8f0" />
 
 ## Usage 
-Download this repo as a .zip and run reminderapp.pyw. Pillow and Pystray are required. The program will attempt to autoinstall them if they aren't detected.
+Go to the release and download EyeReminder.exe OR download this repo as a .zip and run reminderapp.pyw. 
+
+For the python file, Pillow and Pystray are required. The program will attempt to autoinstall them if they aren't detected.
 
 You can also install them on your own before running:
 ```
@@ -39,6 +41,11 @@ pip install -r requirements.txt
 ```
 
 Important note: this program only works on windows because I only use windows (for now).
+
+## Demo
+
+https://github.com/user-attachments/assets/6a680500-3eab-4a1b-aec1-00c7ca85cc95
+
 
 ## Font Credits
 
