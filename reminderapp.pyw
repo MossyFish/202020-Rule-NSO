@@ -46,18 +46,16 @@ from ui_elements import (
 )
  
 def _set_dpi_awareness():
-    # the right API changes across diff windows versions so try all 
-    attempts = (
+    for fn in (
         lambda: ctypes.windll.shcore.SetProcessDpiAwareness(1),
         lambda: ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-5)),
         lambda: ctypes.windll.shcore.SetProcessDpiAwareness(0),
-    )
-    for attempt in attempts:
+    ):
         try:
-            attempt()
-            return
+            fn()
+            break
         except Exception:
-            pass
+            continue
 
 _set_dpi_awareness()
 
@@ -342,13 +340,11 @@ class Widget(tk.Tk):
         )
 
     ### Controls
-    # Flips pause on and off and updates the button label
     def toggle_pause(self):
         self.manually_paused = not self.manually_paused
         self.pause_btn.configure(text="START" if self.manually_paused else "PAUSE")
         self._refresh_status()
                                 
-    # Restarts countdown from TIMER min
     def reset_timer(self):
         self.remaining = self.timer_duration
         self.manually_paused = False
@@ -357,7 +353,6 @@ class Widget(tk.Tk):
         self._update_time_labels()
         self._refresh_status()
                 
-    # Switches themes
     def toggle_theme(self):
         self.NSO_theme = not self.NSO_theme
         apply_theme(self)
@@ -366,8 +361,6 @@ class Widget(tk.Tk):
         set_autostart(enabled)
 
     ### Main loop
-    
-    # checks idle time and counts down then fires at 0 
     def _tick(self):
         idle = get_sec()
 
@@ -473,7 +466,6 @@ class Widget(tk.Tk):
             self._tray_icon = None
         self.destroy()
                     
-    # Reads input fields and restarts the countdown with the new durations
     def apply_settings(self):
         try:
             new_timer_min = max(1, int(self.timer_spin.get()))
@@ -484,7 +476,6 @@ class Widget(tk.Tk):
         new_timer_duration = new_timer_min * 60
         self.idle_threshold = new_idle_min * 60
 
-        # Resets timer if TIMER was changed
         if new_timer_duration != self.timer_duration:
             self.timer_duration = new_timer_duration
             self.remaining = self.timer_duration
